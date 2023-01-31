@@ -1,4 +1,4 @@
-*.csv*
+*~*
 /.idea
 tensorflow_model
 launch.bat
