@@ -8,7 +8,7 @@ from tensorflow import keras
 model_path = "tensorflow_model"
 
 def load_data():
-    player_dataframe = pandas.read_csv('player_data.csv')
+    player_dataframe = pandas.read_csv('training_data.csv')
     player_dataframe = player_dataframe.set_index('player_id')
 
     player_data = player_dataframe.drop("in_hall_of_fame", axis=1)
