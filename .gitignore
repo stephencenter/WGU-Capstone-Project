@@ -2,3 +2,5 @@
 /.idea
 tensorflow_model
 launch.bat
+*.ods
+*.pdf

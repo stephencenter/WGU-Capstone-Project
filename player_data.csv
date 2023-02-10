@@ -1,4 +1,4 @@
-player_id,player_name,birth_date,birth_place,height,weight,hand_batting,hand_throwing,debut_date,num_games,num_seasons,allstar_apps,in_hall_of_fame,war,batter_atbats,batter_hits,batter_runs,batter_homeruns,batter_obp,batter_slugging,batting_ops,batter_rbi,batter_average,pitcher_ip,pitcher_wins,pitcher_losses,pitcher_era,pitcher_whip,pitcher_saves,pitcher_strikeouts
+player_id,player_name,birth_date,birth_place,height,weight,hand_batting,hand_throwing,debut_date,num_games,num_seasons,allstar_apps,in_hall_of_fame,war,batter_atbats,batter_hits,batter_runs,batter_homeruns,batter_obp,batter_slugging,batting_ops,batter_rbi,batter_average,pitcher_innings,pitcher_wins,pitcher_losses,pitcher_era,pitcher_whip,pitcher_saves,pitcher_strikeouts
 aardsda01,David Aardsma,1981-12-27,"Denver, CO, USA",6' 3'',215,R,R,2004-04-06,331,9,0,0,1.9,4,0,0,0,0,0,0,0,0,337,16,18,4.27,1.42,69,340
 aaronha01,Hank Aaron,1934-2-5,"Mobile, AL, USA",6' 0'',180,R,R,1954-04-13,3298,23,24,1,143,12364,3771,2174,755,0.374,0.555,0.928,2297,0.305,0,0,0,0,0,0,0
 aaronto01,Tommie Aaron,1939-8-5,"Mobile, AL, USA",6' 3'',190,R,R,1962-04-10,437,7,0,0,0,944,216,102,13,0.292,0.327,0.619,94,0.229,0,0,0,0,0,0,0

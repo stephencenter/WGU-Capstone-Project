@@ -8,16 +8,19 @@ from tensorflow import keras
 model_path = "tensorflow_model"
 
 def load_data():
-    player_dataframe = pandas.read_csv('training_data.csv')
+    training_dataframe = pandas.read_csv('training_data.csv')
+    training_dataframe = training_dataframe.set_index('player_id')
+
+    training_x = training_dataframe.drop('in_hall_of_fame', axis=1)
+    training_y = training_dataframe['in_hall_of_fame']
+
+    player_dataframe = pandas.read_csv('player_data.csv')
     player_dataframe = player_dataframe.set_index('player_id')
 
-    player_data = player_dataframe.drop("in_hall_of_fame", axis=1)
-    player_labels = player_dataframe["in_hall_of_fame"]
+    return training_x, training_y, player_dataframe
 
-    return player_data, player_labels
-
-def prepare_data(player_data, player_labels):
-    train_data, test_data, train_labels, test_labels = sklearn.model_selection.train_test_split(player_data, player_labels, test_size=0.25, random_state=256)
+def prepare_data(training_x, training_y):
+    train_data, test_data, train_labels, test_labels = sklearn.model_selection.train_test_split(training_x, training_y, test_size=0.25, random_state=256)
 
     data_scaler = sklearn.preprocessing.StandardScaler()
     train_data_scaled = data_scaler.fit_transform(train_data)
@@ -25,23 +28,32 @@ def prepare_data(player_data, player_labels):
 
     return train_data_scaled, train_labels, test_data_scaled, test_labels, data_scaler
 
-def analyze_data(player_data, player_labels):
+def analyze_data(player_dataframe : pandas.DataFrame):
     mean_data = dict()
-    for key in player_data.keys():
-        nonzeros = [val for val in player_data[key] if val != 0]
-        mean_data[key] = sum(nonzeros)/len(nonzeros)
+    for key in player_dataframe.keys():
+        nonzeros = [val for val in player_dataframe[key] if not isinstance(val, str) and val != 0]
+        try:
+            mean_data[key] = sum(nonzeros) / len(nonzeros)
+        except ZeroDivisionError:
+            pass
 
-    hof_mean_data = {key: [] for key in player_data.keys()}
-    for player in player_data.iterrows():
-        player_id = player[0]
-        if player_labels[player_id]:
-            for key in hof_mean_data.keys():
-                value = player[1][key]
-                if value != 0:
-                    hof_mean_data[key].append(value)
+    hof_mean_data = {key: [] for key in player_dataframe.keys()}
+    for player in player_dataframe.iterrows():
+        player_data = player[1]
 
-    for key in hof_mean_data.keys():
-        hof_mean_data[key] = sum(hof_mean_data[key]) / len(hof_mean_data[key])
+        if not player_data["in_hall_of_fame"]:
+            continue
+
+        for stat in player_data.keys():
+            value = player_data[stat]
+            if not isinstance(value, str) and value != 0:
+                hof_mean_data[stat].append(value)
+
+    for key in list(hof_mean_data):
+        try:
+            hof_mean_data[key] = sum(hof_mean_data[key]) / len(hof_mean_data[key])
+        except ZeroDivisionError:
+            del hof_mean_data[key]
 
     return mean_data, hof_mean_data
 
@@ -171,8 +183,8 @@ def get_user_input(mean_stats, hof_mean_stats):
 def main():
     tensorflow.random.set_seed(128)
 
-    player_data, player_labels = load_data()
-    train_data_scaled, train_labels, test_data_scaled, test_labels, data_scaler = prepare_data(player_data, player_labels)
+    training_x, training_y, player_dataframe = load_data()
+    train_data_scaled, train_labels, test_data_scaled, test_labels, data_scaler = prepare_data(training_x, training_y)
 
     model = create_model()
 
@@ -185,7 +197,7 @@ def main():
 
     test_model(model, test_data_scaled, test_labels)
 
-    mean, hof_mean = analyze_data(player_data, player_labels)
+    mean, hof_mean = analyze_data(player_dataframe)
     mean_stats = pandas.DataFrame(mean, index=["Average (All)"])
     hof_mean_stats = pandas.DataFrame(hof_mean, index=["Average (HOF)"])
 
