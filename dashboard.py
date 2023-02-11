@@ -21,7 +21,7 @@ def calculate_averages(player_dataframe : pandas.DataFrame):
     # should be. This is especially relevant for Losses, ERA, and WHIP where lower is better, meaning that
     # players who've never pitched an inning will make the averages for those stats look much better than
     # they should be
-    ignore_zeros = ['pitcher_innings', 'pitcher_wins', 'pitcher_losses', 'pitcher_era', 'pitcher_whip', 'pitcher_saves', 'pitcher_strikeouts']
+    ignore_zeros = ['pitcher_innings', 'pitcher_era', 'pitcher_whip', 'pitcher_saves', 'pitcher_strikeouts']
 
     for player in player_dataframe.iterrows():
         player_data = player[1]
@@ -56,6 +56,7 @@ def display_player_stat_charts(all_mean_stats, eligible_mean_stats, hof_mean_sta
     stat_list = [
         ('war', "Wins Above Replacement (WAR)", "WAR"),
         ('batter_atbats', "At bats (AB)", "AB"),
+        ('batter_homeruns', "Home runs (HR)", "HR"),
         ('batter_average', "Batting Average (BA)", "AVG"),
         ('batter_obp', "On-base Percentage (OBP)", "OBP"),
         ('batter_slugging', "Slugging Average (SLG)", "SLG"),
@@ -63,6 +64,7 @@ def display_player_stat_charts(all_mean_stats, eligible_mean_stats, hof_mean_sta
         ('pitcher_era', "Earned Run Average (ERA)", "ERA"),
         ('pitcher_whip', "Walks + Hits per Inning Pitched (WHIP)", "WHIP"),
         ('pitcher_winloss', "Win/Loss Ratio as Pitcher", "W-L%"),
+        ('pitcher_strikeouts', "Strikeouts (SO)", "SO"),
         ('allstar_apps', "All-Star Game Appearances", "All-Star")
     ]
 
@@ -72,6 +74,7 @@ def display_player_stat_charts(all_mean_stats, eligible_mean_stats, hof_mean_sta
         with tab:
             stat = stat_list[index][0]
             stat_name = stat_list[index][1]
+            streamlit.write(stat_name)
             stat_chart = express.bar({"All": all_mean_stats[stat], "Eligible": eligible_mean_stats[stat], "HOF": hof_mean_stats[stat]},
                                      labels={'variable': 'Legend', 'value': stat_name, 'index': ''})
             streamlit.plotly_chart(stat_chart)
