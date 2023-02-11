@@ -1,210 +1,141 @@
-import os
 import pandas
-import tensorflow
 import streamlit
-import sklearn.model_selection
-from tensorflow import keras
-
-model_path = "tensorflow_model"
+import plotly.express as express
 
 def load_data():
-    training_dataframe = pandas.read_csv('training_data.csv')
-    training_dataframe = training_dataframe.set_index('player_id')
-
-    training_x = training_dataframe.drop('in_hall_of_fame', axis=1)
-    training_y = training_dataframe['in_hall_of_fame']
-
     player_dataframe = pandas.read_csv('player_data.csv')
     player_dataframe = player_dataframe.set_index('player_id')
 
-    return training_x, training_y, player_dataframe
+    progress_dataframe = pandas.read_csv('hof_progression.csv')
 
-def prepare_data(training_x, training_y):
-    train_data, test_data, train_labels, test_labels = sklearn.model_selection.train_test_split(training_x, training_y, test_size=0.25, random_state=256)
+    return player_dataframe, progress_dataframe
 
-    data_scaler = sklearn.preprocessing.StandardScaler()
-    train_data_scaled = data_scaler.fit_transform(train_data)
-    test_data_scaled = data_scaler.transform(test_data)
-
-    return train_data_scaled, train_labels, test_data_scaled, test_labels, data_scaler
-
-def analyze_data(player_dataframe : pandas.DataFrame):
-    mean_data = dict()
-    for key in player_dataframe.keys():
-        nonzeros = [val for val in player_dataframe[key] if not isinstance(val, str) and val != 0]
-        try:
-            mean_data[key] = sum(nonzeros) / len(nonzeros)
-        except ZeroDivisionError:
-            pass
-
+def calculate_averages(player_dataframe : pandas.DataFrame):
+    all_mean_data = {key: [] for key in player_dataframe.keys()}
+    eligible_mean_data = {key: [] for key in player_dataframe.keys()}
     hof_mean_data = {key: [] for key in player_dataframe.keys()}
+
+    # Players who have a zero will be ignored in calculating the averages for these stats.
+    # This is important when averaging stats for pitching, as many batters (even HOF batters) will
+    # go their entire career without pitching a single inning, dragging the averages further down than they
+    # should be. This is especially relevant for Losses, ERA, and WHIP where lower is better, meaning that
+    # players who've never pitched an inning will make the averages for those stats look much better than
+    # they should be
+    ignore_zeros = ['pitcher_innings', 'pitcher_wins', 'pitcher_losses', 'pitcher_era', 'pitcher_whip', 'pitcher_saves', 'pitcher_strikeouts']
+
     for player in player_dataframe.iterrows():
         player_data = player[1]
 
-        if not player_data["in_hall_of_fame"]:
-            continue
-
         for stat in player_data.keys():
             value = player_data[stat]
-            if not isinstance(value, str) and value != 0:
-                hof_mean_data[stat].append(value)
+            if not isinstance(value, str) and not (value == 0 and stat in ignore_zeros):
+                all_mean_data[stat].append(value)
 
-    for key in list(hof_mean_data):
-        try:
-            hof_mean_data[key] = sum(hof_mean_data[key]) / len(hof_mean_data[key])
-        except ZeroDivisionError:
-            del hof_mean_data[key]
+                if player_data["num_seasons"] >= 10:
+                    eligible_mean_data[stat].append(value)
 
-    return mean_data, hof_mean_data
+                if player_data["in_hall_of_fame"]:
+                    hof_mean_data[stat].append(value)
 
-def create_model():
-    new_model = keras.Sequential([
-        keras.layers.Dense(256, activation='relu'),
-        keras.layers.Dense(256, activation='relu'),
-        keras.layers.Dense(1, activation='sigmoid')
-    ])
+    for dictionary in [all_mean_data, eligible_mean_data, hof_mean_data]:
+        for key in list(dictionary):
+            try:
+                dictionary[key] = sum(dictionary[key]) / len(dictionary[key])
+            except ZeroDivisionError:
+                del dictionary[key]
 
-    new_model.compile(
-        loss=keras.losses.binary_crossentropy,
-        optimizer=keras.optimizers.RMSprop(),
-        metrics=[
-            keras.metrics.BinaryAccuracy(name='accuracy'),
-            keras.metrics.Precision(name='precision'),
-            keras.metrics.Recall(name='recall')
-        ]
-    )
+        dictionary['pitcher_winloss'] = dictionary['pitcher_wins']/dictionary['pitcher_losses']
 
-    return new_model
+    all_mean_df = pandas.DataFrame(all_mean_data, index=["Average (All)"])
+    eligible_mean_df = pandas.DataFrame(eligible_mean_data, index=["Average (Eligible)"])
+    hof_mean_df = pandas.DataFrame(hof_mean_data, index=["Average (HOF)"])
 
-def train_model(model, train_data_scaled, train_labels, test_data_scaled, test_labels):
-    model.fit(
-        train_data_scaled,
-        train_labels,
-        epochs=20,
-        validation_data=(test_data_scaled, test_labels)
-    )
+    return all_mean_df, eligible_mean_df, hof_mean_df
 
-def test_model(model, test_data, test_labels):
-    t_pos = 0
-    t_neg = 0
-    f_neg = 0
-    f_pos = 0
+def display_player_stat_charts(all_mean_stats, eligible_mean_stats, hof_mean_stats):
+    stat_list = [
+        ('war', "Wins Above Replacement (WAR)", "WAR"),
+        ('batter_atbats', "At bats (AB)", "AB"),
+        ('batter_average', "Batting Average (BA)", "AVG"),
+        ('batter_obp', "On-base Percentage (OBP)", "OBP"),
+        ('batter_slugging', "Slugging Average (SLG)", "SLG"),
+        ('pitcher_innings', "Innings Pitched (IP)", "IP"),
+        ('pitcher_era', "Earned Run Average (ERA)", "ERA"),
+        ('pitcher_whip', "Walks + Hits per Inning Pitched (WHIP)", "WHIP"),
+        ('pitcher_winloss', "Win/Loss Ratio as Pitcher", "W-L%"),
+        ('allstar_apps', "All-Star Game Appearances", "All-Star")
+    ]
 
-    predictions = model.predict(test_data)
-    for index, pair in enumerate(zip(test_labels, predictions)):
-        if pair[1] > 0.5:
-            if pair[0] == 0:
-                f_pos += 1
-            else:
-                t_pos += 1
+    tab_list = streamlit.tabs([x[2] for x in stat_list])
 
-        else:
-            if pair[0] == 0:
-                t_neg += 1
-            else:
-                f_neg += 1
+    for index, tab in enumerate(tab_list):
+        with tab:
+            stat = stat_list[index][0]
+            stat_name = stat_list[index][1]
+            stat_chart = express.bar({"All": all_mean_stats[stat], "Eligible": eligible_mean_stats[stat], "HOF": hof_mean_stats[stat]},
+                                     labels={'variable': 'Legend', 'value': stat_name, 'index': ''})
+            streamlit.plotly_chart(stat_chart)
 
-    accuracy = (t_pos + t_neg)/(t_pos + t_neg + f_pos + f_neg)
-    streamlit.write(f"Accuracy: {round(accuracy*100, 2)}%, T-Pos: {t_pos}, T-Neg: {t_neg}, F-Pos: {f_pos}, F-Neg: {f_neg}")
+def display_player_hand_charts(player_dataframe):
+    tab_1, tab_2, tab_3 = streamlit.tabs(["Batting Hand", "Throwing Hand", "Combinations"])
+    with tab_1:
+        batting_hand_data = player_dataframe['hand_batting'].tolist()
+        batting_hand_dict = {"names": ["Left", "Right"],
+                             "values": [batting_hand_data.count("L"), batting_hand_data.count("R")]}
+        batting_hand_chart = express.pie(batting_hand_dict, values="values", names='names')
 
-def create_bar_graph(mean_stats, hof_mean_stats, index, value, text):
-    with streamlit.expander(f"Compare {text}"):
-        streamlit.bar_chart({"You": {"Your Input": value}, "All": mean_stats[index], "HOF": hof_mean_stats[index]})
+        streamlit.write("Right vs Left Hand for Batting")
+        streamlit.plotly_chart(batting_hand_chart)
 
-def get_user_input(mean_stats, hof_mean_stats):
-    column_1, column_2, column_3 = streamlit.columns(3)
-    with column_1:
-        war = streamlit.number_input("Wins Above Replacement (WAR)", value=0.0, min_value=-10.0, step=0.1, format="%.1f")
-        create_bar_graph(mean_stats, hof_mean_stats, "war", war, "WAR")
+    with tab_2:
+        throwing_hand_data = player_dataframe['hand_throwing'].tolist()
+        throwing_hand_dict = {"names": ["Left", "Right"],
+                              "values": [throwing_hand_data.count("L"), throwing_hand_data.count("R")]}
+        throwing_hand_chart = express.pie(throwing_hand_dict, values="values", names='names')
+        streamlit.write("Right vs Left Hand for Throwing")
+        streamlit.plotly_chart(throwing_hand_chart)
 
-        batter_average = streamlit.number_input("Batting Average (BA)", min_value=0.0, max_value=1.0, step=0.001, format="%.3f")
-        create_bar_graph(mean_stats, hof_mean_stats, "batter_average", batter_average, "Batting Average")
+    with tab_3:
+        both_left = 0
+        both_right = 0
+        bat_left_throw_right = 0
+        bat_right_throw_left = 0
+        for player in player_dataframe.iterrows():
+            bat_hand = player[1]['hand_batting']
+            throw_hand = player[1]['hand_throwing']
 
-        batter_obp = streamlit.number_input("On-base Percentage (OBP)", min_value=0.0, max_value=1.0, step=0.001, format="%.3f")
-        create_bar_graph(mean_stats, hof_mean_stats, "batter_obp", batter_obp, "OBP")
+            if bat_hand == "L" and throw_hand == "L":
+                both_left += 1
+            elif bat_hand == "R" and throw_hand == "R":
+                both_right += 1
+            elif bat_hand == "L" and throw_hand == "R":
+                bat_left_throw_right += 1
+            elif bat_hand == "R" and throw_hand == "L":
+                bat_right_throw_left += 1
 
-        pitcher_losses = streamlit.number_input("Losses as pitcher (L)", min_value=0, step=1)
-        create_bar_graph(mean_stats, hof_mean_stats, "pitcher_losses", pitcher_losses, "Losses")
+        player_hand_dict = {"names": ["Both L", "Both R", "Bat L, Throw R", "Bat R, Throw L"],
+                            "values": [both_left, both_right, bat_left_throw_right, bat_right_throw_left]}
 
-        pitcher_innings = streamlit.number_input("Innings pitched (IP)", min_value=0.0, step=0.1, format="%.1f")
-        create_bar_graph(mean_stats, hof_mean_stats, "pitcher_innings", pitcher_innings, "Innings Pitched")
+        player_hand_chart = express.pie(player_hand_dict, values="values", names='names')
+        streamlit.write("Batting and Throwing Hand Combinations")
+        streamlit.plotly_chart(player_hand_chart)
 
-    with column_2:
-        batter_atbats = streamlit.number_input("At bats (AB)", min_value=0, step=1)
-        create_bar_graph(mean_stats, hof_mean_stats, "batter_atbats", batter_atbats, "At bats")
-
-        batter_runs = streamlit.number_input("Runs (R)", min_value=0, step=1)
-        create_bar_graph(mean_stats, hof_mean_stats, "batter_runs", batter_runs, "Runs")
-
-        batter_slugging = streamlit.number_input("Slugging Average (SLG)", min_value=0.0, max_value=4.0, step=0.001, format="%.3f")
-        create_bar_graph(mean_stats, hof_mean_stats, "batter_slugging", batter_slugging, "SLG")
-
-        pitcher_era = streamlit.number_input("Earned Run Average (ERA)", min_value=0.0, step=0.01, format="%.2f")
-        create_bar_graph(mean_stats, hof_mean_stats, "pitcher_era", pitcher_era, "ERA")
-
-        pitcher_whip = streamlit.number_input("Walks + Hits per Inning Pitched (WHIP)", min_value=0.0, step=0.001, format="%.3f")
-        create_bar_graph(mean_stats, hof_mean_stats, "pitcher_whip", pitcher_whip, "WHIP")
-
-    with column_3:
-        batter_homeruns = streamlit.number_input("Home runs (HR)", min_value=0, step=1)
-        create_bar_graph(mean_stats, hof_mean_stats, "batter_homeruns", batter_homeruns, "Home runs")
-
-        batter_rbi = streamlit.number_input("Runs Batted In (RBI)", min_value=0, step=1)
-        create_bar_graph(mean_stats, hof_mean_stats, "batter_rbi", batter_rbi, "RBI")
-
-        pitcher_wins = streamlit.number_input("Wins as pitcher (W)", min_value=0, step=1)
-        create_bar_graph(mean_stats, hof_mean_stats, "pitcher_wins", pitcher_wins, "Wins")
-
-        pitcher_saves = streamlit.number_input("Saves (SV)", min_value=0, step=1)
-        create_bar_graph(mean_stats, hof_mean_stats, "pitcher_saves", pitcher_saves, "Saves")
-
-        allstar_apps = streamlit.number_input("All-Star Game Appearances", min_value=0, step=1)
-        create_bar_graph(mean_stats, hof_mean_stats, "allstar_apps", allstar_apps, "All-Star Games")
-
-
-    return {
-        "batter_atbats": batter_atbats,
-        "batter_homeruns": batter_homeruns,
-        "batter_obp": batter_obp,
-        "batter_slugging": batter_slugging,
-        "batter_runs": batter_runs,
-        "batter_rbi": batter_rbi,
-        "batter_average": batter_average,
-        "pitcher_innings": pitcher_innings,
-        "pitcher_wins": pitcher_wins,
-        "pitcher_losses": pitcher_losses,
-        "pitcher_era": pitcher_era,
-        "pitcher_whip": pitcher_whip,
-        "pitcher_saves": pitcher_saves,
-        "war": war,
-        "allstar_apps": allstar_apps
-    }
+def display_hof_progression_charts(progress_df):
+    progress_chart = express.line(progress_df, x='Year', y=progress_df.columns[1:3], labels={'variable':'Legend', 'value':'Number of Inductees'})
+    streamlit.plotly_chart(progress_chart)
 
 def main():
-    tensorflow.random.set_seed(128)
+    player_df, progress_df = load_data()
+    all_mean_df, eligible_mean_df, hof_mean_df = calculate_averages(player_df)
 
-    training_x, training_y, player_dataframe = load_data()
-    train_data_scaled, train_labels, test_data_scaled, test_labels, data_scaler = prepare_data(training_x, training_y)
+    streamlit.subheader("Average Stat Comparisons")
+    display_player_stat_charts(all_mean_df, eligible_mean_df, hof_mean_df)
 
-    model = create_model()
+    streamlit.subheader("Hall of Fame Inductees Over Time")
+    display_hof_progression_charts(progress_df)
 
-    if os.path.exists(model_path):
-        model = keras.models.load_model(model_path)
-
-    else:
-        train_model(model, train_data_scaled, train_labels, test_data_scaled, test_labels)
-        model.save(model_path)
-
-    test_model(model, test_data_scaled, test_labels)
-
-    mean, hof_mean = analyze_data(player_dataframe)
-    mean_stats = pandas.DataFrame(mean, index=["Average (All)"])
-    hof_mean_stats = pandas.DataFrame(hof_mean, index=["Average (HOF)"])
-
-    user_stats = pandas.DataFrame(get_user_input(mean_stats, hof_mean_stats), index=["user"])
-    user_stats_scaled = data_scaler.transform(user_stats)
-
-    streamlit.write(f"{round(float(model.predict(user_stats_scaled))*100, 2)}%")
+    streamlit.subheader("Primary Hands for Batting and Throwing")
+    display_player_hand_charts(player_df)
 
 if __name__ == "__main__":
     main()

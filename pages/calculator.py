@@ -28,35 +28,6 @@ def prepare_data(training_x, training_y):
 
     return train_data_scaled, train_labels, test_data_scaled, test_labels, data_scaler
 
-def analyze_data(player_dataframe : pandas.DataFrame):
-    mean_data = dict()
-    for key in player_dataframe.keys():
-        nonzeros = [val for val in player_dataframe[key] if not isinstance(val, str) and val != 0]
-        try:
-            mean_data[key] = sum(nonzeros) / len(nonzeros)
-        except ZeroDivisionError:
-            pass
-
-    hof_mean_data = {key: [] for key in player_dataframe.keys()}
-    for player in player_dataframe.iterrows():
-        player_data = player[1]
-
-        if not player_data["in_hall_of_fame"]:
-            continue
-
-        for stat in player_data.keys():
-            value = player_data[stat]
-            if not isinstance(value, str) and value != 0:
-                hof_mean_data[stat].append(value)
-
-    for key in list(hof_mean_data):
-        try:
-            hof_mean_data[key] = sum(hof_mean_data[key]) / len(hof_mean_data[key])
-        except ZeroDivisionError:
-            del hof_mean_data[key]
-
-    return mean_data, hof_mean_data
-
 def create_model():
     new_model = keras.Sequential([
         keras.layers.Dense(256, activation='relu'),
@@ -84,7 +55,7 @@ def train_model(model, train_data_scaled, train_labels, test_data_scaled, test_l
         validation_data=(test_data_scaled, test_labels)
     )
 
-def test_model(model, test_data, test_labels):
+def evaluate_model(model, test_data, test_labels):
     t_pos = 0
     t_neg = 0
     f_neg = 0
@@ -105,9 +76,11 @@ def test_model(model, test_data, test_labels):
                 f_neg += 1
 
     accuracy = (t_pos + t_neg)/(t_pos + t_neg + f_pos + f_neg)
-    streamlit.write(f"Accuracy: {round(accuracy*100, 2)}%, T-Pos: {t_pos}, T-Neg: {t_neg}, F-Pos: {f_pos}, F-Neg: {f_neg}")
+    precision = t_pos/(t_pos + f_pos)
+    recall = t_pos/(t_pos + f_neg)
+    return accuracy, precision, recall
 
-def get_user_input(mean_stats, hof_mean_stats):
+def get_user_input():
     column_1, column_2, column_3 = streamlit.columns(3)
     with column_1:
         war = streamlit.number_input("Wins Above Replacement (WAR)", value=0.0, min_value=-10.0, step=0.1, format="%.1f")
@@ -151,6 +124,7 @@ def get_user_input(mean_stats, hof_mean_stats):
 
 def main():
     tensorflow.random.set_seed(128)
+    percentage = lambda x: round(float(x)*100, 2)
 
     training_x, training_y, player_dataframe = load_data()
     train_data_scaled, train_labels, test_data_scaled, test_labels, data_scaler = prepare_data(training_x, training_y)
@@ -164,16 +138,22 @@ def main():
         train_model(model, train_data_scaled, train_labels, test_data_scaled, test_labels)
         model.save(model_path)
 
-    test_model(model, test_data_scaled, test_labels)
 
-    mean, hof_mean = analyze_data(player_dataframe)
-    mean_stats = pandas.DataFrame(mean, index=["Average (All)"])
-    hof_mean_stats = pandas.DataFrame(hof_mean, index=["Average (HOF)"])
-
-    user_stats = pandas.DataFrame(get_user_input(mean_stats, hof_mean_stats), index=["user"])
+    streamlit.title("Hall of Fame Calculator")
+    streamlit.write("Input a player's stats and an AI will predict if that player would be elected to the Baseball Hall of Fame")
+    user_input = get_user_input()
+    user_stats = pandas.DataFrame(user_input, index=["user"])
     user_stats_scaled = data_scaler.transform(user_stats)
 
-    streamlit.write(f"{round(float(model.predict(user_stats_scaled))*100, 2)}%")
+    hof_prediction = model.predict(user_stats_scaled)
+    streamlit.subheader(f"The chance that a player with the above stats would be elected to the hall of fame is...")
+    streamlit.subheader(f"...{percentage(hof_prediction)}%")
+
+    streamlit.subheader("Model Evaluation:")
+    accuracy, precision, recall = evaluate_model(model, test_data_scaled, test_labels)
+    streamlit.write(f"Accuracy: {percentage(accuracy)}%")
+    streamlit.write(f"Precision: {percentage(precision)}%")
+    streamlit.write(f"Recall: {percentage(recall)}%")
 
 if __name__ == "__main__":
     main()
