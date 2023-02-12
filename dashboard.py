@@ -15,20 +15,24 @@ def calculate_averages(player_dataframe : pandas.DataFrame):
     eligible_mean_data = {key: [] for key in player_dataframe.keys()}
     hof_mean_data = {key: [] for key in player_dataframe.keys()}
 
-    # Players who have a zero will be ignored in calculating the averages for these stats.
+    # Players who have never pitched an inning will be ignored in calculating the averages for these stats.
     # This is important when averaging stats for pitching, as many batters (even HOF batters) will
     # go their entire career without pitching a single inning, dragging the averages further down than they
-    # should be. This is especially relevant for Losses, ERA, and WHIP where lower is better, meaning that
+    # should be. This is especially relevant for ERA and WHIP where lower is better, meaning that
     # players who've never pitched an inning will make the averages for those stats look much better than
     # they should be
-    ignore_zeros = ['pitcher_innings', 'pitcher_era', 'pitcher_whip', 'pitcher_saves', 'pitcher_strikeouts']
+    ignore_zeros = ['pitcher_innings', 'pitcher_era', 'pitcher_whip', 'pitcher_wins', 'pitcher_losses', 'pitcher_saves', 'pitcher_strikeouts']
 
     for player in player_dataframe.iterrows():
         player_data = player[1]
 
         for stat in player_data.keys():
             value = player_data[stat]
-            if not isinstance(value, str) and not (value == 0 and stat in ignore_zeros):
+
+            if stat in ignore_zeros and player_data['pitcher_innings'] == 0:
+                continue
+
+            if not isinstance(value, str):
                 all_mean_data[stat].append(value)
 
                 if player_data["num_seasons"] >= 10:
@@ -44,7 +48,7 @@ def calculate_averages(player_dataframe : pandas.DataFrame):
             except ZeroDivisionError:
                 del dictionary[key]
 
-        dictionary['pitcher_winloss'] = dictionary['pitcher_wins']/dictionary['pitcher_losses']
+        dictionary['pitcher_winloss'] = dictionary['pitcher_wins']/(dictionary['pitcher_wins'] + dictionary['pitcher_losses'])
 
     all_mean_df = pandas.DataFrame(all_mean_data, index=["Average (All)"])
     eligible_mean_df = pandas.DataFrame(eligible_mean_data, index=["Average (Eligible)"])
@@ -54,18 +58,61 @@ def calculate_averages(player_dataframe : pandas.DataFrame):
 
 def display_player_stat_charts(all_mean_stats, eligible_mean_stats, hof_mean_stats):
     stat_list = [
-        ('war', "Wins Above Replacement (WAR)", "WAR"),
-        ('batter_atbats', "At bats (AB)", "AB"),
-        ('batter_homeruns', "Home runs (HR)", "HR"),
-        ('batter_average', "Batting Average (BA)", "AVG"),
-        ('batter_obp', "On-base Percentage (OBP)", "OBP"),
-        ('batter_slugging', "Slugging Average (SLG)", "SLG"),
-        ('pitcher_innings', "Innings Pitched (IP)", "IP"),
-        ('pitcher_era', "Earned Run Average (ERA)", "ERA"),
-        ('pitcher_whip', "Walks + Hits per Inning Pitched (WHIP)", "WHIP"),
-        ('pitcher_winloss', "Win/Loss Ratio as Pitcher", "W-L%"),
-        ('pitcher_strikeouts', "Strikeouts (SO)", "SO"),
-        ('allstar_apps', "All-Star Game Appearances", "All-Star")
+        ('war', "Wins Above Replacement (WAR)", "WAR",
+"""Wins Above Replacement (WAR) is an estimate of how many games were won by a player's team that would have been lost 
+had that player been swapped out for a 'typical' player. It is a subjective statistic with no universal method of
+calculation. The dataset for this project uses the player's WAR as calculated by baseball-reference.com.
+\nA higher WAR stat is better."""),
+
+        ('batter_atbats', "At bats (AB)", "AB",
+"""At bats (AB) is the number of times a player stepped up to the home plate to bat and achieved either a hit
+or an out, not including sacrifice hits or sacrifice flies. Plate appearances ending in a walk or hit-by-pitch
+are also not considered at bats."""),
+
+        ('batter_homeruns', "Home runs (HR)", "HR",
+"""Home Runs (HR) is the number of times a player hit the ball and then managed to round all four bases in one play."""),
+
+        ('batter_average', "Batting Average (BA)", "AVG",
+"""Batting Average (AVG) is a player's ratio of Hits to At Bats.
+\nA higher batting average is better."""),
+
+        ('batter_obp', "On-base Percentage (OBP)", "OBP",
+"""On-base Percentage (OBP) is how frequently a player reaches base after stepping up to bat. This includes walks
+and hit-by-pitches.
+\nA higher on-base percentage is better."""),
+
+        ('batter_slugging', "Slugging Average (SLG)", "SLG",
+"""Slugging Average (SLG), also called 'Slugging Percentage', is the total number of bases ran divided by the total
+number of at bats. Total bases is calculated as (Singles + 2\*Doubles + 3\*Triples + 4\*Home Runs).
+\nA higher slugging average is better."""),
+
+        ('pitcher_innings', "Innings Pitched (IP)", "IP",
+"""Innings Pitched (IP) is the total number of innings completed by a pitcher. As three outs ends an inning, 
+innings pitched is equal to one third the total number of outs that occurred while the pitcher was on the mound.
+\nOnly players who have pitched at least one inning were used to calculate these averages."""),
+
+        ('pitcher_era', "Earned Run Average (ERA)", "ERA",
+"""Earned Run Average (ERA) is the ratio of opponent runs allowed by a pitcher to the number of 9-inning games that
+pitcher has pitched.
+\nA lower earned run average is better. Only players who have pitched at least one inning were used to calculate these averages."""),
+
+        ('pitcher_whip', "Walks + Hits per Inning Pitched (WHIP)", "WHIP",
+"""Walks + Hits per Inning Pitched (WHIP) is the number of walks and hits a pitcher allowed divided by the number of
+innings the player pitched.
+\nA lower WHIP is better. Only players who have pitched at least one inning were used to calculate these averages."""),
+
+        ('pitcher_winloss', "Win/Loss Percentage as Pitcher", "W-L%",
+"""Win-Loss Percentage as Pitcher (W-L%) is the ratio of games won by a pitcher to games pitched by that pitcher.
+A win-loss ratio above 0.5 means the pitcher wins more than they lose, and below 0.5 means they lose more than they win.
+\nA higher W-L% is better. Only players who have pitched at least one inning were used to calculate these averages."""),
+
+        ('pitcher_strikeouts', "Strikeouts (SO)", "SO",
+"""Strikeouts (SO) is the number of times a pitcher threw three strikes in a single opponent's at bat, 
+causing an out.
+\nOnly players who have pitched at least one inning were used to calculate these averages."""),
+
+        ('allstar_apps', "All-Star Game Appearances", "All-Star",
+"""All-Star Game Appearances is the number of times a player was selected for the MLB's annual All-Star Game's roster.""")
     ]
 
     tab_list = streamlit.tabs([x[2] for x in stat_list])
@@ -74,7 +121,8 @@ def display_player_stat_charts(all_mean_stats, eligible_mean_stats, hof_mean_sta
         with tab:
             stat = stat_list[index][0]
             stat_name = stat_list[index][1]
-            streamlit.write(stat_name)
+            stat_desc = stat_list[index][3]
+            streamlit.write(stat_desc)
             stat_chart = express.bar({"All": all_mean_stats[stat], "Eligible": eligible_mean_stats[stat], "HOF": hof_mean_stats[stat]},
                                      labels={'variable': 'Legend', 'value': stat_name, 'index': ''})
             streamlit.plotly_chart(stat_chart)
