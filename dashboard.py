@@ -117,67 +117,94 @@ causing an out.
 
     tab_list = streamlit.tabs([x[2] for x in stat_list])
 
+    chart_explanation = """
+'All' refers to the average value across all 20370 players in the dataset.
+\n'Eligible' refers to the average value across the 4137 players who have played the minimum 10 seasons required to 
+become eligible for election to the Baseball Hall of Fame
+\n'HOF' refers to the average value across the 271 players who have actually been elected to the baseball hall of 
+fame."""
+
     for index, tab in enumerate(tab_list):
         with tab:
             stat = stat_list[index][0]
             stat_name = stat_list[index][1]
+            stat_abbreviation = stat_list[index][2]
             stat_desc = stat_list[index][3]
-            streamlit.write(stat_desc)
+
+            with streamlit.expander(f"What does '{stat_abbreviation}' mean?"):
+                streamlit.write(stat_desc)
+
             stat_chart = express.bar({"All": all_mean_stats[stat], "Eligible": eligible_mean_stats[stat], "HOF": hof_mean_stats[stat]},
                                      labels={'variable': 'Legend', 'value': stat_name, 'index': ''})
             streamlit.plotly_chart(stat_chart)
 
+            streamlit.write(chart_explanation)
+
+def display_hof_progression_charts(progress_df):
+    streamlit.write("""
+Since its formation in 1936, the Baseball Writers' Association of America (BBWAA) has conducted yearly elections
+to determine which players should be inducted into the National Baseball Hall of Fame. Over the years a total of
+271 players have been inducted into the Hall of Fame, and they represent what the BBWAA considers the best of
+the best.""")
+
+    progress_chart = express.line(progress_df, x='Year', y=progress_df.columns[1:3], labels={'variable':'Legend', 'value':'Number of Inductees'})
+    streamlit.plotly_chart(progress_chart)
+
 def display_player_hand_charts(player_dataframe):
+    individual = { 'bat_left': 0, 'bat_right': 0, 'throw_left': 0, 'throw_right': 0 }
+    combinations = { 'both_left': 0, 'both_right': 0, 'b_left_t_right': 0, 'b_right_t_left': 0 }
+
+    for player in player_dataframe.iterrows():
+        bat_hand = player[1]['hand_batting']
+        throw_hand = player[1]['hand_throwing']
+
+        if bat_hand == "L" and throw_hand == "L":
+            individual['bat_left'] += 1
+            individual['throw_left'] += 1
+            combinations['both_left'] += 1
+
+        elif bat_hand == "R" and throw_hand == "R":
+            individual['bat_right'] += 1
+            individual['throw_right'] += 1
+            combinations['both_right'] += 1
+
+        elif bat_hand == "L" and throw_hand == "R":
+            individual['bat_left'] += 1
+            individual['throw_right'] += 1
+            combinations['b_left_t_right'] += 1
+
+        elif bat_hand == "R" and throw_hand == "L":
+            individual['bat_right'] += 1
+            individual['throw_left'] += 1
+            combinations['b_right_t_left'] += 1
+
     tab_1, tab_2, tab_3 = streamlit.tabs(["Batting Hand", "Throwing Hand", "Combinations"])
     with tab_1:
-        batting_hand_data = player_dataframe['hand_batting'].tolist()
-        batting_hand_dict = {"names": ["Left", "Right"],
-                             "values": [batting_hand_data.count("L"), batting_hand_data.count("R")]}
-        batting_hand_chart = express.pie(batting_hand_dict, values="values", names='names')
-
+        bat_hand_dict = {"names": ["Left", "Right"], "values": [individual['bat_left'], individual['bat_right']]}
+        bat_hand_chart = express.pie(bat_hand_dict, values="values", names='names')
         streamlit.write("Right vs Left Hand for Batting")
-        streamlit.plotly_chart(batting_hand_chart)
+        streamlit.plotly_chart(bat_hand_chart)
 
     with tab_2:
-        throwing_hand_data = player_dataframe['hand_throwing'].tolist()
-        throwing_hand_dict = {"names": ["Left", "Right"],
-                              "values": [throwing_hand_data.count("L"), throwing_hand_data.count("R")]}
-        throwing_hand_chart = express.pie(throwing_hand_dict, values="values", names='names')
+        throw_hand_dict = {"names": ["Left", "Right"], "values": [individual['throw_left'], individual['throw_right']]}
+        throw_hand_chart = express.pie(throw_hand_dict, values="values", names='names')
         streamlit.write("Right vs Left Hand for Throwing")
-        streamlit.plotly_chart(throwing_hand_chart)
+        streamlit.plotly_chart(throw_hand_chart)
 
     with tab_3:
-        both_left = 0
-        both_right = 0
-        bat_left_throw_right = 0
-        bat_right_throw_left = 0
-        for player in player_dataframe.iterrows():
-            bat_hand = player[1]['hand_batting']
-            throw_hand = player[1]['hand_throwing']
-
-            if bat_hand == "L" and throw_hand == "L":
-                both_left += 1
-            elif bat_hand == "R" and throw_hand == "R":
-                both_right += 1
-            elif bat_hand == "L" and throw_hand == "R":
-                bat_left_throw_right += 1
-            elif bat_hand == "R" and throw_hand == "L":
-                bat_right_throw_left += 1
-
         player_hand_dict = {"names": ["Both L", "Both R", "Bat L, Throw R", "Bat R, Throw L"],
-                            "values": [both_left, both_right, bat_left_throw_right, bat_right_throw_left]}
-
+                            "values": [combinations['both_left'], combinations['both_right'],
+                                       combinations['b_left_t_right'], combinations['b_right_t_left']]}
         player_hand_chart = express.pie(player_hand_dict, values="values", names='names')
         streamlit.write("Batting and Throwing Hand Combinations")
         streamlit.plotly_chart(player_hand_chart)
 
-def display_hof_progression_charts(progress_df):
-    progress_chart = express.line(progress_df, x='Year', y=progress_df.columns[1:3], labels={'variable':'Legend', 'value':'Number of Inductees'})
-    streamlit.plotly_chart(progress_chart)
-
 def main():
-    player_df, progress_df = load_data()
-    all_mean_df, eligible_mean_df, hof_mean_df = calculate_averages(player_df)
+    with streamlit.spinner("Loading data..."):
+        player_df, progress_df = load_data()
+        all_mean_df, eligible_mean_df, hof_mean_df = calculate_averages(player_df)
+
+    streamlit.title("150 Years of MLB History Visualized")
 
     streamlit.subheader("Average Stat Comparisons")
     display_player_stat_charts(all_mean_df, eligible_mean_df, hof_mean_df)

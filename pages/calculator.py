@@ -103,7 +103,6 @@ def get_user_input():
         pitcher_saves = streamlit.number_input("Saves (SV)", min_value=0, step=1)
         allstar_apps = streamlit.number_input("All-Star Game Appearances", min_value=0, step=1)
 
-
     return {
         "batter_atbats": batter_atbats,
         "batter_homeruns": batter_homeruns,
