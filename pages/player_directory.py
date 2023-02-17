@@ -61,17 +61,14 @@ def display_player_info(sel_player):
         streamlit.write(f"Birthdate: {sel_player['birth_date']}")
         streamlit.write(f"Height: {sel_player['height']}")
         streamlit.write(f"Batting Hand: {sel_player['hand_batting']}")
-        streamlit.write(f"Games played: {sel_player['num_games']}")
         streamlit.write(f"MLB Debut Date: {sel_player['debut_date']}")
-        streamlit.write(f"In Hall of Fame? {'Yes' if sel_player['in_hall_of_fame'] else 'No'}")
 
     with info_column_2:
         streamlit.write(f"BBref ID: {streamlit.session_state['selected_player']}")
         streamlit.write(f"Birthplace: {sel_player['birth_place']}")
         streamlit.write(f"Weight: {sel_player['weight']}")
         streamlit.write(f"Throwing Hand: {sel_player['hand_throwing']}")
-        streamlit.write(f"Seasons played: {sel_player['num_seasons']}")
-        streamlit.write(f"All-Star Games: {sel_player['allstar_apps']}")
+        streamlit.write(f"In Hall of Fame? {'Yes' if sel_player['in_hall_of_fame'] else 'No'}")
 
     streamlit.subheader(f"Player Career Stats")
 
@@ -85,6 +82,8 @@ def display_player_info(sel_player):
         streamlit.write(f"Slugging Average (SLG): {sel_player['batter_slugging']}")
         streamlit.write(f"Runs Batted In (RBI): {sel_player['batter_rbi']}")
         streamlit.write(f"Batting Average: {sel_player['batter_average']}")
+        streamlit.write(f"Seasons played: {sel_player['num_seasons']}")
+        streamlit.write(f"All-Star Games: {sel_player['allstar_apps']}")
 
     with stats_column_2:
         streamlit.write(f"Innings Pitched (IP): {sel_player['pitcher_innings']}")
@@ -95,9 +94,11 @@ def display_player_info(sel_player):
         streamlit.write(f"Saves (SV): {sel_player['pitcher_saves']}")
         streamlit.write(f"Strikeouts (SO): {sel_player['pitcher_strikeouts']}")
         streamlit.write(f"Wins Above Replacement (WAR): {sel_player['war']}")
+        streamlit.write(f"Games played: {sel_player['num_games']}")
 
-    streamlit.write(f"Stats current up to 2021")
-    streamlit.write(f"Career stats only consider seasonal play, playoffs are not counted")
+    streamlit.caption("Stats current up to 2021")
+    streamlit.caption("Data sourced from Sean Lahman’s Baseball Database")
+    streamlit.caption("WAR calculation sourced from baseball-database.com")
 
 def set_selected_player(player_id):
     streamlit.session_state['selected_player'] = player_id
@@ -109,9 +110,9 @@ def main():
     player_dataframe = load_data()
 
     if streamlit.session_state['selected_player'] is not None:
+        streamlit.button("Back to player directory", key='top_back', on_click=set_selected_player, args=[None])
         sel_player = find_player_by_id(streamlit.session_state['selected_player'], player_dataframe)
         display_player_info(sel_player)
-        streamlit.button("Back to player directory", key='back_button', on_click=set_selected_player, args=[None])
 
     else:
         streamlit.title("MLB Player Directory")

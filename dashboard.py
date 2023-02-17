@@ -200,11 +200,21 @@ def display_player_hand_charts(player_dataframe):
         streamlit.plotly_chart(player_hand_chart)
 
 def main():
-    with streamlit.spinner("Loading data..."):
-        player_df, progress_df = load_data()
-        all_mean_df, eligible_mean_df, hof_mean_df = calculate_averages(player_df)
-
     streamlit.title("150 Years of MLB History Visualized")
+
+    if all(key in streamlit.session_state for key in ['averages', 'progress_df', 'player_df']):
+        all_mean_df, eligible_mean_df, hof_mean_df = streamlit.session_state['averages']
+        progress_df = streamlit.session_state['progress_df']
+        player_df = streamlit.session_state['player_df']
+
+    else:
+        with streamlit.spinner("Loading data..."):
+            player_df, progress_df = load_data()
+            all_mean_df, eligible_mean_df, hof_mean_df = calculate_averages(player_df)
+
+            streamlit.session_state['averages'] = all_mean_df, eligible_mean_df, hof_mean_df
+            streamlit.session_state['progress_df'] = progress_df
+            streamlit.session_state['player_df'] = player_df
 
     streamlit.subheader("Average Stat Comparisons")
     display_player_stat_charts(all_mean_df, eligible_mean_df, hof_mean_df)
