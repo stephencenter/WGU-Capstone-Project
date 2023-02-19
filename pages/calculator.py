@@ -5,23 +5,31 @@ import streamlit
 import sklearn.model_selection
 from tensorflow import keras
 
+# This is the folder where our AI model will be stored so we don't have to retrain it every time the
+# app is launched
 model_path = "tensorflow_model"
 
 def load_data():
+    # Load the training dataset from its csv file and set its index as the player_id column
     training_dataframe = pandas.read_csv('training_data.csv')
     training_dataframe = training_dataframe.set_index('player_id')
 
+    # training_x contains all of the data for each player in the training set including runs, at bats, etc
+    # training_y is a key that tells us whether each player is in the hall of fame or not
     training_x = training_dataframe.drop('in_hall_of_fame', axis=1)
     training_y = training_dataframe['in_hall_of_fame']
 
-    player_dataframe = pandas.read_csv('player_data.csv')
-    player_dataframe = player_dataframe.set_index('player_id')
-
-    return training_x, training_y, player_dataframe
+    return training_x, training_y
 
 def prepare_data(training_x, training_y):
+    # We split our training data and labels into two groups, one for training and one for testing
+    # This is done at a ratio of 4 training samples to 1 testing sample
     train_data, test_data, train_labels, test_labels = sklearn.model_selection.train_test_split(training_x, training_y, test_size=0.2, random_state=256)
 
+    # The data scaler accounts for the fact that the magnitudes of our data are not all in the same ballpark
+    # For example, players always have batting averages between 0 and 1, but their WAR could be any number
+    # This data scaler adjusts all our values to the same -1 to 1 scale so they can be interpreted more easily by the
+    # model
     data_scaler = sklearn.preprocessing.StandardScaler()
     train_data_scaled = data_scaler.fit_transform(train_data)
     test_data_scaled = data_scaler.transform(test_data)
@@ -29,6 +37,7 @@ def prepare_data(training_x, training_y):
     return train_data_scaled, train_labels, test_data_scaled, test_labels, data_scaler
 
 def create_model():
+    # Initialize a blank model with three layers
     new_model = keras.Sequential([
         keras.layers.Dense(256, activation='relu'),
         keras.layers.Dense(256, activation='relu'),
@@ -48,6 +57,7 @@ def create_model():
     return new_model
 
 def train_model(model, train_data_scaled, train_labels, test_data_scaled, test_labels):
+    # Now we train the model to recognize hall of fame players using our training data
     model.fit(
         train_data_scaled,
         train_labels,
@@ -58,32 +68,56 @@ def train_model(model, train_data_scaled, train_labels, test_data_scaled, test_l
     return model
 
 def evaluate_model(model, test_data, test_labels):
+    # We ask our AI model to go through our test data and predict whether it thinks
+    # each player is a hall-of-famer or not. Its prediction will then be compared to
+    # the true answer to determine the accuracy, precision, and recall for this model
     predictions = model.predict(test_data)
 
     t_pos = 0
     t_neg = 0
     f_pos = 0
     f_neg = 0
-    for index, pair in enumerate(zip(test_labels, predictions)):
-        if pair[1] > 0.5:
-            if pair[0] == 0:
+
+    # Iterate through each of the AI's predictions. pair is a two-item tuple where
+    # item 0 is the AI's prediction and item 1 is the correct answer
+    for pair in zip(predictions, test_labels):
+        # The AI's prediction is actually a float between 0 and 1, with a value closer to those extremes
+        # indicating greater condifence from the AI. For this case we'll simply say if the AI's prediction
+        # is closer to 0 then it's a 0, and if it's closer to 1 then it's a 1
+        if pair[0] > 0.5:
+            # If the AI predicted closer to 1 and this guess was wrong, this indicates a false positive
+            if pair[1] == 0:
                 f_pos += 1
+
+            # If the AI predicted closer to 1 and this guess was correct, this indicates a true positive
             else:
                 t_pos += 1
 
         else:
-            if pair[0] == 0:
+            # If the AI predicted closer to 0 and this guess was correct, this indicates a true negative
+            if pair[1] == 0:
                 t_neg += 1
+
+            # If the AI predicted closer to 0 and this guess was wrong, this indicates a false negative
             else:
                 f_neg += 1
 
+    # We use the running totals of true/false positives/negatives to calculate the
+    # accuracy, precision, and recall values, which is the final evaluation of the model that we will return
     accuracy = (t_pos + t_neg)/(t_pos + t_neg + f_pos + f_neg)
     precision = t_pos/(t_pos + f_pos)
     recall = t_pos/(t_pos + f_neg)
+
     return accuracy, precision, recall
 
 def get_user_input():
+    # We have streamlit create a three-column layout for this page and put
+    # five input boxes in each one. This way the user can see all the input
+    # boxes at once on a normal 1080p monitor
     column_1, column_2, column_3 = streamlit.columns(3)
+
+    # We use "with" to place these number inputs into our columns. The streamlit library will
+    # collect the input from the boxes when the user types
     with column_1:
         war = streamlit.number_input("Wins Above Replacement (WAR)", value=0.0, min_value=-10.0, step=0.1, format="%.1f")
         batter_average = streamlit.number_input("Batting Average (BA)", min_value=0.0, max_value=1.0, step=0.001, format="%.3f")
@@ -105,6 +139,9 @@ def get_user_input():
         pitcher_innings = streamlit.number_input("Innings pitched (IP)", min_value=0.0, step=0.1, format="%.1f")
         allstar_apps = streamlit.number_input("All-Star Game Appearances", min_value=0, step=1)
 
+    # Return the values the user input into the boxes
+    # We return it as a dictionary so we can convert it into a dataframe on the other side
+    # The values have to be in this order because it's the same order as the training data
     return {
         "batter_atbats": batter_atbats,
         "batter_homeruns": batter_homeruns,
@@ -124,24 +161,28 @@ def get_user_input():
     }
 
 def main():
+    # We use the same tensorflow seed every time to avoid variation if the model needs to be regenerated
     tensorflow.random.set_seed(128)
-    percentage = lambda x: round(float(x)*100, 2)
 
     streamlit.title("Hall of Fame Calculator")
     streamlit.write("Input a player's stats and an AI will say whether this player should be elected to the Baseball Hall of Fame")
 
+    # Loading and preparing the data, model, etc. can take a long time, so we store
+    # those things in streamlit's session state so we can quickly retrieve them later.
+    # Otherwise we'd have to load everything every time we open the page
     if all(key in streamlit.session_state for key in ['loaded_model', 'data_scaler', 'model_eval']):
         model = streamlit.session_state['loaded_model']
         data_scaler = streamlit.session_state['data_scaler']
         model_evaluation = streamlit.session_state['model_eval']
 
     else:
-        loading_spinner = streamlit.spinner("Preparing AI...")
-
-        with loading_spinner:
-            training_x, training_y, player_dataframe = load_data()
+        # This spinner will be visible until the code inside is done running
+        with streamlit.spinner("Preparing AI..."):
+            # Load and prepare the training data
+            training_x, training_y = load_data()
             train_data_scaled, train_labels, test_data_scaled, test_labels, data_scaler = prepare_data(training_x, training_y)
 
+            # If the model exists we load it from file, if it doesn't then we train a new one
             model = create_model()
             if os.path.exists(model_path):
                 model = keras.models.load_model(model_path)
@@ -150,25 +191,36 @@ def main():
                 model = train_model(model, train_data_scaled, train_labels, test_data_scaled, test_labels)
                 model.save(model_path)
 
+            # Evaluate the accuracy of the model
             model_evaluation = evaluate_model(model, test_data_scaled, test_labels)
 
+            # All of these variables are saved to session state as mentioned earlier
             streamlit.session_state['loaded_model'] = model
             streamlit.session_state['data_scaler'] = data_scaler
             streamlit.session_state['model_eval'] = model_evaluation
 
+    # Get the input from the input boxes and convert it to a scaled dataframe
     user_input = get_user_input()
     user_stats = pandas.DataFrame(user_input, index=["user"])
     user_stats_scaled = data_scaler.transform(user_stats)
 
+    # This lambda function takes a float and converts it to a percentage with two decimal places
+    # Ex: 0.682930 -> 68.29
+    percentage = lambda x: round(float(x)*100, 2)
+
+    # This spinner will be visible until the code inside is done running
     with streamlit.spinner("Calculating..."):
+        # We ask the AI what the chance is of a player with the stats the user input being elected to the hall of fame
         hof_prediction = model.predict(user_stats_scaled)
         streamlit.write(f"Based on past data, the AI estimates a **{percentage(hof_prediction)}%** chance of this player being elected to the Hall of Fame.")
 
+        # Based on the AI's prediction, we ask it to make a recommendation
         if hof_prediction < 0.5:
             streamlit.write(f"The AI recommends that this player should **NOT** be elected to the Baseball Hall of Fame")
         else:
             streamlit.write(f"The AI recommends that this player **SHOULD** be elected to the Baseball Hall of Fame")
 
+    # Display the evaluation of the AI model
     with streamlit.expander("Model Evaluation"):
         streamlit.write(f"Accuracy: {percentage(model_evaluation[0])}%")
         streamlit.write(f"Precision: {percentage(model_evaluation[1])}%")
