@@ -1,3 +1,6 @@
+import os
+import time
+import traceback
 import pandas
 import streamlit
 
@@ -141,4 +144,23 @@ def main():
             display_search_results(search_results, user_search)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+
+    # If an error occurs during program execution, we log the error to a file
+    except Exception as ex:
+        log_dir = 'Error Logs'
+        log_path = f"{log_dir}/{time.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+
+        # Make the error log folder if it doesn't exist already
+        try:
+            os.makedirs(log_dir)
+        except FileExistsError:
+            pass
+
+        # Write the error message to the log file
+        with open(log_path, mode='w') as f:
+            f.write(traceback.format_exc())
+
+        # Raise the exception that was caught
+        raise

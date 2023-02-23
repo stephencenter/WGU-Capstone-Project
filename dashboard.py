@@ -1,3 +1,6 @@
+import time
+import os
+import traceback
 import pandas
 import streamlit
 import plotly.express as express
@@ -46,11 +49,11 @@ def calculate_averages(player_dataframe : pandas.DataFrame):
             if not isinstance(value, str):
                 all_mean_data[stat].append(value)
 
-                if player_data["num_seasons"] >= 10:
-                    eligible_mean_data[stat].append(value)
-
                 if player_data["in_hall_of_fame"]:
                     hof_mean_data[stat].append(value)
+
+                if player_data["num_seasons"] >= 10:
+                    eligible_mean_data[stat].append(value)
 
     # Iterate through each of the three dictionaries we've created
     for dictionary in [all_mean_data, eligible_mean_data, hof_mean_data]:
@@ -265,4 +268,23 @@ def main():
     display_player_hand_charts(player_df)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+
+    # If an error occurs during program execution, we log the error to a file
+    except Exception as ex:
+        log_dir = 'Error Logs'
+        log_path = f"{log_dir}/{time.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+
+        # Make the error log folder if it doesn't exist already
+        try:
+            os.makedirs(log_dir)
+        except FileExistsError:
+            pass
+
+        # Write the error message to the log file
+        with open(log_path, mode='w') as f:
+            f.write(traceback.format_exc())
+
+        # Raise the exception that was caught
+        raise

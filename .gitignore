@@ -1,6 +1,9 @@
 *~*
-/.idea
-tensorflow_model
-launch.bat
 *.ods
 *.pdf
+*.txt
+*.bat
+.idea/
+Machine Learning Environment/
+tensorflow_model
+baseballdatabank*

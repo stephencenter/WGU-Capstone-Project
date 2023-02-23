@@ -1,4 +1,6 @@
 import os
+import time
+import traceback
 import pandas
 import tensorflow
 import streamlit
@@ -56,59 +58,11 @@ def create_model():
 
     return new_model
 
-def train_model(model, train_data_scaled, train_labels, test_data_scaled, test_labels):
+def train_model(model, train_data_scaled, train_labels):
     # Now we train the model to recognize hall of fame players using our training data
-    model.fit(
-        train_data_scaled,
-        train_labels,
-        epochs=100,
-        validation_data=(test_data_scaled, test_labels)
-    )
+    model.fit(train_data_scaled, train_labels, epochs=100)
 
     return model
-
-def evaluate_model(model, test_data, test_labels):
-    # We ask our AI model to go through our test data and predict whether it thinks
-    # each player is a hall-of-famer or not. Its prediction will then be compared to
-    # the true answer to determine the accuracy, precision, and recall for this model
-    predictions = model.predict(test_data)
-
-    t_pos = 0
-    t_neg = 0
-    f_pos = 0
-    f_neg = 0
-
-    # Iterate through each of the AI's predictions. pair is a two-item tuple where
-    # item 0 is the AI's prediction and item 1 is the correct answer
-    for pair in zip(predictions, test_labels):
-        # The AI's prediction is actually a float between 0 and 1, with a value closer to those extremes
-        # indicating greater condifence from the AI. For this case we'll simply say if the AI's prediction
-        # is closer to 0 then it's a 0, and if it's closer to 1 then it's a 1
-        if pair[0] > 0.5:
-            # If the AI predicted closer to 1 and this guess was wrong, this indicates a false positive
-            if pair[1] == 0:
-                f_pos += 1
-
-            # If the AI predicted closer to 1 and this guess was correct, this indicates a true positive
-            else:
-                t_pos += 1
-
-        else:
-            # If the AI predicted closer to 0 and this guess was correct, this indicates a true negative
-            if pair[1] == 0:
-                t_neg += 1
-
-            # If the AI predicted closer to 0 and this guess was wrong, this indicates a false negative
-            else:
-                f_neg += 1
-
-    # We use the running totals of true/false positives/negatives to calculate the
-    # accuracy, precision, and recall values, which is the final evaluation of the model that we will return
-    accuracy = (t_pos + t_neg)/(t_pos + t_neg + f_pos + f_neg)
-    precision = t_pos/(t_pos + f_pos)
-    recall = t_pos/(t_pos + f_neg)
-
-    return accuracy, precision, recall
 
 def get_user_input():
     # We have streamlit create a three-column layout for this page and put
@@ -165,7 +119,7 @@ def main():
     tensorflow.random.set_seed(128)
 
     streamlit.title("Hall of Fame Calculator")
-    streamlit.write("Input a player's stats and an AI will say whether this player should be elected to the Baseball Hall of Fame")
+    streamlit.write("Input a player's career stats and an AI will say whether this player should be elected to the Hall of Fame")
 
     # Loading and preparing the data, model, etc. can take a long time, so we store
     # those things in streamlit's session state so we can quickly retrieve them later.
@@ -180,7 +134,7 @@ def main():
         with streamlit.spinner("Preparing AI..."):
             # Load and prepare the training data
             training_x, training_y = load_data()
-            train_data_scaled, train_labels, test_data_scaled, test_labels, data_scaler = prepare_data(training_x, training_y)
+            train_data, train_labels, test_data, test_labels, data_scaler = prepare_data(training_x, training_y)
 
             # If the model exists we load it from file, if it doesn't then we train a new one
             model = create_model()
@@ -188,11 +142,10 @@ def main():
                 model = keras.models.load_model(model_path)
 
             else:
-                model = train_model(model, train_data_scaled, train_labels, test_data_scaled, test_labels)
+                model = train_model(model, train_data, train_labels)
                 model.save(model_path)
 
-            # Evaluate the accuracy of the model
-            model_evaluation = evaluate_model(model, test_data_scaled, test_labels)
+            model_evaluation = model.evaluate(test_data, test_labels)
 
             # All of these variables are saved to session state as mentioned earlier
             streamlit.session_state['loaded_model'] = model
@@ -206,7 +159,7 @@ def main():
 
     # This lambda function takes a float and converts it to a percentage with two decimal places
     # Ex: 0.682930 -> 68.29
-    percentage = lambda x: round(float(x)*100, 2)
+    percentage = lambda val: round(float(val)*100, 2)
 
     # This spinner will be visible until the code inside is done running
     with streamlit.spinner("Calculating..."):
@@ -222,9 +175,29 @@ def main():
 
     # Display the evaluation of the AI model
     with streamlit.expander("Model Evaluation"):
-        streamlit.write(f"Accuracy: {percentage(model_evaluation[0])}%")
-        streamlit.write(f"Precision: {percentage(model_evaluation[1])}%")
-        streamlit.write(f"Recall: {percentage(model_evaluation[2])}%")
+        streamlit.write(f"Accuracy: {percentage(model_evaluation[1])}%")
+        streamlit.write(f"Precision: {percentage(model_evaluation[2])}%")
+        streamlit.write(f"Recall: {percentage(model_evaluation[3])}%")
+        streamlit.write(f"Loss: {percentage(model_evaluation[0])}%")
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+
+    # If an error occurs during program execution, we log the error to a file
+    except Exception as ex:
+        log_dir = 'Error Logs'
+        log_path = f"{log_dir}/{time.strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+
+        # Make the error log folder if it doesn't exist already
+        try:
+            os.makedirs(log_dir)
+        except FileExistsError:
+            pass
+
+        # Write the error message to the log file
+        with open(log_path, mode='w') as f:
+            f.write(traceback.format_exc())
+
+        # Raise the exception that was caught
+        raise
